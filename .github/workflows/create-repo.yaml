@@ -36,7 +36,7 @@ jobs:
         if: steps.label-check.outputs.runWorkflow == 'false'
         run: echo "Not a repository request; skipping."
 
-      - name: Validate Approver and Notify Issue Ops Team
+      - name: Validate Approver
         id: validate-approver
         if: steps.label-check.outputs.runWorkflow == 'true'
         uses: actions/github-script@v6
@@ -46,16 +46,17 @@ jobs:
             // Only proceed if the comment contains the '/approve' command.
             if (!context.payload.comment.body.includes("/approve")) {
               core.info("No '/approve' command found in the comment. Exiting.");
-              return { valid: false };
+              core.setOutput("valid", "false");
+              return;
             }
             // Identify the user who posted the /approve comment.
             const approver = context.payload.comment.user.login;
             const org = context.repo.owner;
-            // Update this team slug as necessary.
+            // Specify the team slug for issue‑ops.
             const team_slug = "issue-ops";
             let isMember = false;
             try {
-              // Check if the approver is an active member of the issue-ops team.
+              // Check if the approver is an active member of the issue‑ops team.
               const membership = await github.rest.teams.getMembershipForUserInOrg({
                 org: org,
                 team_slug: team_slug,
@@ -71,16 +72,8 @@ jobs:
             if (!isMember) {
               throw new Error(`User @${approver} is not a member of the '${team_slug}' team and is not authorized to approve repository creation.`);
             }
-            // Notify the issue-ops team (optional) that approval was received.
-            const teamMention = `@${org}/${team_slug}`;
-            const notifyComment = `Repository creation approval received from @${approver}. ${teamMention} team, please review this request.`;
-            await github.rest.issues.createComment({
-              owner: org,
-              repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: notifyComment
-            });
-            return { valid: true };
+            // Explicitly set the output to signal a valid approver.
+            core.setOutput("valid", "true");
 
       - name: Create Repository and Configure Access
         if: steps.validate-approver.outputs.valid == 'true'
