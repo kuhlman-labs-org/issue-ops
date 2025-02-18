@@ -1,0 +1,32 @@
+name: Notify Issue Ops Team on New Repo Request
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify_team:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Issue Ops Team if Request Detected
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.ISSUE_OPS_TOKEN }}
+          script: |
+            // Only notify if the issue has the 'newrepo' label
+            const labels = context.payload.issue.labels.map(label => label.name);
+            if (!labels.includes("newrepo")) {
+              console.log("Issue does not have the 'newrepo' label. Exiting.");
+              return;
+            }
+            const org = context.repo.owner;
+            // GitHub does not support direct team assignment, so we notify the team instead.
+            const teamMention = `@${org}/issue-ops`;
+            const commentBody = `Hello ${teamMention}, a new repository request has been submitted. Please review this issue.`;
+            await github.rest.issues.createComment({
+              owner: org,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+            console.log("Issue Ops team notified.");
