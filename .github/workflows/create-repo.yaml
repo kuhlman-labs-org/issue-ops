@@ -8,19 +8,30 @@ jobs:
   create_repo:
     runs-on: ubuntu-latest
     steps:
-      - name: Check for newrepo Label on Parent Issue
+      - name: Check for newrepo Label
         id: label-check
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.ISSUE_OPS_TOKEN }}
           script: |
-            const labels = context.payload.issue.labels.map(label => label.name);
-            if (!labels.includes("newrepo")) {
+            const issueNumber = context.issue.number;
+            // Fetch the latest issue data.
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+            // Some labels may be returned as strings; normalize them to their name.
+            const labels = issue.labels.map(label => typeof label === 'string' ? label : label.name);
+            console.log("Fetched labels: " + JSON.stringify(labels));      
+            // Use a case-insensitive check
+            const hasNewRepoLabel = labels.some(l => l.toLowerCase() === "newrepo");
+            if (!hasNewRepoLabel) {
               core.info("Issue does not have the 'newrepo' label. Exiting.");
               return { runWorkflow: false };
             }
             return { runWorkflow: true };
-
+            
       - name: Exit if Not a Repository Request
         if: steps.label-check.outputs.runWorkflow == 'false'
         run: echo "Not a repository request; skipping."
