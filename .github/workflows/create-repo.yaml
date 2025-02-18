@@ -21,16 +21,16 @@ jobs:
               repo: context.repo.repo,
               issue_number: issueNumber,
             });
-            // Some labels may be returned as strings; normalize them to their name.
+            // Normalize labels (they may be objects or strings)
             const labels = issue.labels.map(label => typeof label === 'string' ? label : label.name);
             console.log("Fetched labels: " + JSON.stringify(labels));      
-            // Use a case-insensitive check
+            // Check for the label in a case-insensitive way.
             const hasNewRepoLabel = labels.some(l => l.toLowerCase() === "newrepo");
             if (!hasNewRepoLabel) {
-              core.info("Issue does not have the 'newrepo' label. Exiting.");
-              return { runWorkflow: false };
+              core.info("Issue does not have the 'newrepo' label.");
             }
-            return { runWorkflow: true };
+            // Explicitly set the output value.
+            core.setOutput("runWorkflow", hasNewRepoLabel ? "true" : "false");
             
       - name: Exit if Not a Repository Request
         if: steps.label-check.outputs.runWorkflow == 'false'
