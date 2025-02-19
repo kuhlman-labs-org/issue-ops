@@ -85,16 +85,27 @@ jobs:
             console.log("Full issue body:");
             console.log(issueBody);
       
-            // Updated extraction functions for flexibility.
             function extractValue(fieldLabel) {
-              const regex = new RegExp(`(?:\\*\\*${fieldLabel}:\\*\\*|${fieldLabel}:)\\s*(.+)`, 'i');
-              const match = issueBody.match(regex);
+              // Try matching colon-delimited or bolded field.
+              let regex = new RegExp(`(?:\\*\\*${fieldLabel}\\*\\*:\\s*|${fieldLabel}:\\s*)(.+)`, 'i');
+              let match = issueBody.match(regex);
+              if (match && match[1]) {
+                return match[1].trim();
+              }
+              // Next, try matching a markdown heading style.
+              regex = new RegExp(`^#{1,6}\\s*${fieldLabel}\\s*\\n\\s*\\n([^\\n]+)`, 'im');
+              match = issueBody.match(regex);
               return match ? match[1].trim() : null;
             }
+      
             function extractMultilineValue(fieldLabel) {
-              const regex = new RegExp(`(?:\\*\\*${fieldLabel}:\\*\\*|${fieldLabel}:)\\s*([\\s\\S]+)`, 'i');
-              const match = issueBody.match(regex);
-              return match ? match[1].trim() : null;
+              // Capture everything after the heading until the next heading or end-of-text.
+              let regex = new RegExp(
+                `^#{1,6}\\s*${fieldLabel}\\s*\\n\\s*\\n([\\s\\S]+?)(?=^#{1,6}\\s*\\w+\\s*\\n|$)`,
+                'im'
+              );
+              let match = issueBody.match(regex);
+              return match && match[1] ? match[1].trim() : null;
             }
       
             // Extract form values.
