@@ -220,8 +220,10 @@ jobs:
               permission: "admin",
             });
       
-            // --- Post a Comment on the Issue ---
-            const commentBody = `@${issueCreator} Your repository **${repoName}** has been successfully created in **${repoOwner}** and you have been granted admin access.`;
+            // Post a comment to notify the issue creator with a clickable repository link.
+            const repoFullName = repoResponse.data.full_name;  // e.g., "kuhlman-labs-org/test-repo-issue-ops"
+            const repoUrl = repoResponse.data.html_url;          // e.g., "https://github.com/kuhlman-labs-org/test-repo-issue-ops"
+            const commentBody = `@${issueCreator} Your repository [${repoFullName}](${repoUrl}) has been successfully created in **${repoOwner}** and you have been granted admin access.`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
