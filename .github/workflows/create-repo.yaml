@@ -82,6 +82,8 @@ jobs:
           github-token: ${{ secrets.ISSUE_OPS_TOKEN }}
           script: |
             const issueBody = context.payload.issue.body;
+            console.log("Full issue body:");
+            console.log(issueBody);
       
             // Updated extraction functions for flexibility.
             function extractValue(fieldLabel) {
