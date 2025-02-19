@@ -81,36 +81,59 @@ jobs:
         with:
           github-token: ${{ secrets.ISSUE_OPS_TOKEN }}
           script: |
-            // The issue body comes from the GitHub issue form.
             const issueBody = context.payload.issue.body;
-
-            // Helper functions to extract values from markdown fields.
+      
+            // Updated extraction functions for flexibility.
             function extractValue(fieldLabel) {
-              const regex = new RegExp(`\\*\\*${fieldLabel}:\\*\\*\\s*(.+)`, 'i');
+              const regex = new RegExp(`(?:\\*\\*${fieldLabel}:\\*\\*|${fieldLabel}:)\\s*(.+)`, 'i');
               const match = issueBody.match(regex);
               return match ? match[1].trim() : null;
             }
             function extractMultilineValue(fieldLabel) {
-              const regex = new RegExp(`\\*\\*${fieldLabel}:\\*\\*\\s*([\\s\\S]+)`, 'i');
+              const regex = new RegExp(`(?:\\*\\*${fieldLabel}:\\*\\*|${fieldLabel}:)\\s*([\\s\\S]+)`, 'i');
               const match = issueBody.match(regex);
               return match ? match[1].trim() : null;
             }
-
-            // Extract values from the issue form.
+      
+            // Extract form values.
             const repoOwner         = extractValue("Repository owner");
             const repoName          = extractValue("Repository name");
             const repoDesc          = extractValue("Repository description") || "";
             const repoVisibilityRaw = extractValue("Repository visibility");
             const repoAccessRaw     = extractMultilineValue("Repository access");
-
+      
+            console.log("Extracted values:");
+            console.log("Repository owner:", repoOwner);
+            console.log("Repository name:", repoName);
+            console.log("Repository description:", repoDesc);
+            console.log("Repository visibility:", repoVisibilityRaw);
+            console.log("Repository access:", repoAccessRaw);
+      
             if (!repoOwner || !repoName || !repoVisibilityRaw || !repoAccessRaw) {
               throw new Error("Missing required field(s). Ensure Repository owner, name, visibility, and access are provided.");
             }
-
+      
             // Determine repository visibility.
             const visibility = repoVisibilityRaw.toLowerCase() === "internal" ? "internal" : "private";
             console.log(`Creating repository ${repoOwner}/${repoName} with ${visibility} visibility.`);
-
+      
+            // *** Check if repository already exists ***
+            try {
+              // Try to fetch the repository details.
+              await github.rest.repos.get({
+                owner: repoOwner,
+                repo: repoName,
+              });
+              // If the repository exists, throw an error.
+              throw new Error(`Repository ${repoOwner}/${repoName} already exists.`);
+            } catch (error) {
+              // If error.status is 404, the repository doesn't exist. Otherwise, rethrow.
+              if (error.status !== 404) {
+                throw error;
+              }
+              console.log(`Repository ${repoOwner}/${repoName} does not exist. Proceeding with creation.`);
+            }
+      
             // Create the repository in the specified organization.
             const createRepoParams = {
               org: repoOwner,
@@ -121,10 +144,11 @@ jobs:
             };
             const repoResponse = await github.rest.repos.createInOrg(createRepoParams);
             console.log(`Repository created: ${repoResponse.data.full_name}`);
-
-            // Process the "Repository access" field.
+      
+            // --- Process Repository Access ---
+            // Expecting "Repository access" field to be comma- or newline-delimited.
             let accessEntries = [];
-            if (repoAccessRaw.includes('\n')) {
+              if (repoAccessRaw.includes('\n')) {
               accessEntries = repoAccessRaw.split(/\r?\n/).map(line => line.trim()).filter(line => line);
             } else {
               const tokens = repoAccessRaw.split(',').map(token => token.trim()).filter(token => token);
@@ -132,7 +156,7 @@ jobs:
                 accessEntries.push(`${tokens[i]},${tokens[i+1] || ''}`);
               }
             }
-
+      
             async function addUserCollaborator(username, permission) {
               console.log(`Adding collaborator ${username} with permission ${permission}`);
               await github.rest.repos.addCollaborator({
@@ -142,6 +166,7 @@ jobs:
                 permission: permission, // Valid options: pull, triage, push, maintain, admin
               });
             }
+      
             async function addTeamAccess(teamSlug, permission) {
               console.log(`Granting team ${teamSlug} permission ${permission}`);
               await github.rest.teams.addOrUpdateRepoPermissionsInOrg({
@@ -152,7 +177,7 @@ jobs:
                 permission: permission,
               });
             }
-
+      
             for (const entry of accessEntries) {
               const parts = entry.split(',').map(part => part.trim());
               if (parts.length < 2) {
@@ -162,15 +187,17 @@ jobs:
               const entity = parts[0];
               const permission = parts[1].toLowerCase();
               if (entity.startsWith('@') && entity.includes('/')) {
+                // For teams: '@org/teamSlug'
                 const teamSlug = entity.split('/')[1].toLowerCase();
                 await addTeamAccess(teamSlug, permission);
               } else {
+                // For users: '@username' or 'username'
                 const username = entity.startsWith('@') ? entity.slice(1) : entity;
                 await addUserCollaborator(username, permission);
               }
             }
-
-            // Ensure the issue creator gets admin access.
+      
+            // --- Ensure the Issue Creator Gets Admin Access ---
             const issueCreator = context.payload.issue.user.login;
             console.log(`Adding issue creator @${issueCreator} as admin collaborator.`);
             await github.rest.repos.addCollaborator({
@@ -179,8 +206,8 @@ jobs:
               username: issueCreator,
               permission: "admin",
             });
-
-            // Post a comment to notify the issue creator.
+      
+            // --- Post a Comment on the Issue ---
             const commentBody = `@${issueCreator} Your repository **${repoName}** has been successfully created in **${repoOwner}** and you have been granted admin access.`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
